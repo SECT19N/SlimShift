@@ -33,34 +33,51 @@ public class Program {
 		while (true) {
 			try {
 				AnsiConsole.Clear();
-				AnsiConsole.Write(new FigletText("SlimShift").Color(Color.Yellow));
+				AnsiConsole.Write(new FigletText("SlimShift").Color(Color.FromHex("#b00b69")));
 				AnsiConsole.MarkupLine("[dim]Cross-platform video converter[/]\n");
 
-				// Run conversion workflow
-				bool success = await RunConversionWorkflow();
+				// Main menu
+				string operation = AnsiConsole.Prompt(
+					new SelectionPrompt<string>()
+						.Title("What would you like to do?")
+						.AddChoices(
+							"Change video encoder/codec",
+							"Downscale video resolution",
+							"Upscale video resolution",
+							"Change video framerate",
+							"Exit"
+						)
+				);
+
+				if (operation == "Exit") {
+					AnsiConsole.MarkupLine("[yellow]Thanks for using SlimShift! Goodbye![/]");
+					break;
+				}
+
+				// Route to appropriate workflow
+				bool success = operation switch {
+					"Change video encoder/codec" => await RunEncoderChangeWorkflow(),
+					"Downscale video resolution" => await RunDownscaleWorkflow(),
+					"Upscale video resolution" => await RunUpscaleWorkflow(),
+					"Change video framerate" => await RunFramerateWorkflow(),
+					_ => false
+				};
 
 				if (success) {
-					AnsiConsole.MarkupLine("\n[green]✓ Conversion finished successfully![/]");
+					AnsiConsole.MarkupLine("\n[green]✓ Operation completed successfully![/]");
 				}
 			} catch (Exception ex) {
 				AnsiConsole.MarkupLine($"\n[red]✗ Error: {ex.Message}[/]");
 			}
 
-			// Ask user what to do next
+			// Pause before returning to menu
 			AnsiConsole.WriteLine();
-			string choice = AnsiConsole.Prompt(
-				new SelectionPrompt<string>()
-					.Title("What would you like to do?")
-					.AddChoices("Convert another video", "Exit"));
-
-			if (choice == "Exit") {
-				AnsiConsole.MarkupLine("[yellow]Thanks for using SlimShift! Goodbye![/]");
-				break;
-			}
+			AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+			Console.ReadKey();
 		}
 	}
 
-	static async Task<bool> RunConversionWorkflow() {
+	static async Task<bool> RunEncoderChangeWorkflow() {
 		string inputFile = GetValidatedInputFile();
 
 		string codecType = AnsiConsole.Prompt(
@@ -125,6 +142,54 @@ public class Program {
 
 			return false;
 		}
+	}
+
+	static async Task<bool> RunDownscaleWorkflow() {
+		AnsiConsole.MarkupLine("[yellow]Downscale Video Resolution[/]\n");
+
+		string inputFile = GetValidatedInputFile();
+
+		// TODO: Get current video resolution
+		// TODO: Present common downscale options (4K->1080p, 1080p->720p, etc.)
+		// TODO: Or allow custom resolution input
+		// TODO: Implement scaling logic with FFmpeg
+
+		AnsiConsole.MarkupLine("[dim]This feature will be implemented soon...[/]");
+		await Task.Delay(1000); // Placeholder
+
+		return false;
+	}
+
+	static async Task<bool> RunUpscaleWorkflow() {
+		AnsiConsole.MarkupLine("[yellow]Upscale Video Resolution[/]\n");
+
+		string inputFile = GetValidatedInputFile();
+
+		// TODO: Get current video resolution
+		// TODO: Present common upscale options (720p->1080p, 1080p->4K, etc.)
+		// TODO: Or allow custom resolution input
+		// TODO: Implement upscaling logic with FFmpeg (consider quality filters)
+
+		AnsiConsole.MarkupLine("[dim]This feature will be implemented soon...[/]");
+		await Task.Delay(1000); // Placeholder
+
+		return false;
+	}
+
+	static async Task<bool> RunFramerateWorkflow() {
+		AnsiConsole.MarkupLine("[yellow]Change Video Framerate[/]\n");
+
+		string inputFile = GetValidatedInputFile();
+
+		// TODO: Get current framerate
+		// TODO: Ask for target framerate (24, 30, 60, 120, etc.)
+		// TODO: Ask for interpolation method (duplicate frames, blend, motion interpolation)
+		// TODO: Implement framerate conversion with FFmpeg
+
+		AnsiConsole.MarkupLine("[dim]This feature will be implemented soon...[/]");
+		await Task.Delay(1000); // Placeholder
+
+		return false;
 	}
 
 	static string GetValidatedInputFile() {
