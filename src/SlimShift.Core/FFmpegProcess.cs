@@ -3,52 +3,53 @@ using System.Diagnostics;
 namespace SlimShift;
 
 public sealed record ProcessResult(int ExitCode, string StdOut, string StdErr, bool TimedOut) {
-	public bool Succeeded => ExitCode == 0 && !TimedOut;
+    public bool Succeeded => ExitCode == 0 && !TimedOut;
 }
 
 /// <summary>Runs ffmpeg/ffprobe (or any tool) and captures its output.</summary>
 public static class FFmpegProcess {
-	public static async Task<ProcessResult> RunAsync(
-		string executable,
-		IEnumerable<string> arguments,
-		TimeSpan? timeout = null,
-		CancellationToken cancellationToken = default,
-		Action<string>? onStdoutLine = null) {
-		ProcessStartInfo info = new() {
-			FileName = executable,
-			UseShellExecute = false,
-			CreateNoWindow = true,
-			RedirectStandardOutput = true,
-			RedirectStandardError = true
-		};
-		foreach (string argument in arguments) info.ArgumentList.Add(argument);
+    public static async Task<ProcessResult> RunAsync(
+        string executable,
+        IEnumerable<string> arguments,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default,
+        Action<string>? onStdoutLine = null) {
+        ProcessStartInfo info = new() {
+            FileName = executable,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
 
-		using Process process = Process.Start(info)
-			?? throw new InvalidOperationException($"Could not start {executable}.");
+        foreach (string argument in arguments) info.ArgumentList.Add(argument);
 
-		// Read both streams concurrently so a full pipe buffer cannot block the process.
-		// With a line callback, stdout is streamed (e.g. ffmpeg -progress) and not buffered.
-		Task<string> stdout = onStdoutLine == null
-			? process.StandardOutput.ReadToEndAsync(CancellationToken.None)
-			: StreamLinesAsync(process.StandardOutput, onStdoutLine);
-		Task<string> stderr = process.StandardError.ReadToEndAsync(CancellationToken.None);
+        using Process process = Process.Start(info)
+            ?? throw new InvalidOperationException($"Could not start {executable}.");
 
-		using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-		if (timeout is { } limit) cts.CancelAfter(limit);
+        // Read both streams concurrently so a full pipe buffer cannot block the process.
+        // With a line callback, stdout is streamed (e.g. ffmpeg -progress) and not buffered.
+        Task<string> stdout = onStdoutLine == null
+            ? process.StandardOutput.ReadToEndAsync(CancellationToken.None)
+            : StreamLinesAsync(process.StandardOutput, onStdoutLine);
+        Task<string> stderr = process.StandardError.ReadToEndAsync(CancellationToken.None);
 
-		try {
-			await process.WaitForExitAsync(cts.Token);
-		} catch (OperationCanceledException) {
-			process.Kill(entireProcessTree: true);
-			if (cancellationToken.IsCancellationRequested) throw;
-			return new ProcessResult(-1, await stdout, await stderr, TimedOut: true);
-		}
+        using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (timeout is { } limit) cts.CancelAfter(limit);
 
-		return new ProcessResult(process.ExitCode, await stdout, await stderr, TimedOut: false);
-	}
+        try {
+            await process.WaitForExitAsync(cts.Token);
+        } catch (OperationCanceledException) {
+            process.Kill(entireProcessTree: true);
+            if (cancellationToken.IsCancellationRequested) throw;
+            return new ProcessResult(-1, await stdout, await stderr, TimedOut: true);
+        }
 
-	static async Task<string> StreamLinesAsync(StreamReader reader, Action<string> onLine) {
-		while (await reader.ReadLineAsync() is { } line) onLine(line);
-		return "";
-	}
+        return new ProcessResult(process.ExitCode, await stdout, await stderr, TimedOut: false);
+    }
+
+    static async Task<string> StreamLinesAsync(StreamReader reader, Action<string> onLine) {
+        while (await reader.ReadLineAsync() is { } line) onLine(line);
+        return "";
+    }
 }
