@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SlimShift.Core", "src\SlimS
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SlimShift.Cli", "src\SlimShift.Cli\SlimShift.Cli.csproj", "{6618DEA2-B292-4A2F-A1B2-9558392685A7}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SlimShift.Core.Tests", "tests\SlimShift.Core.Tests\SlimShift.Core.Tests.csproj", "{B330F508-242A-470E-9F18-292A5A3E18C9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +47,18 @@ Global
 		{6618DEA2-B292-4A2F-A1B2-9558392685A7}.Release|x64.Build.0 = Release|Any CPU
 		{6618DEA2-B292-4A2F-A1B2-9558392685A7}.Release|x86.ActiveCfg = Release|Any CPU
 		{6618DEA2-B292-4A2F-A1B2-9558392685A7}.Release|x86.Build.0 = Release|Any CPU
+		{B330F508-242A-470E-9F18-292A5A3E18C9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B330F508-242A-470E-9F18-292A5A3E18C9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B330F508-242A-470E-9F18-292A5A3E18C9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B330F508-242A-470E-9F18-292A5A3E18C9}.Debug|x64.Build.0 = Debug|Any CPU
+		{B330F508-242A-470E-9F18-292A5A3E18C9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B330F508-242A-470E-9F18-292A5A3E18C9}.Debug|x86.Build.0 = Debug|Any CPU
+		{B330F508-242A-470E-9F18-292A5A3E18C9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B330F508-242A-470E-9F18-292A5A3E18C9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B330F508-242A-470E-9F18-292A5A3E18C9}.Release|x64.ActiveCfg = Release|Any CPU
+		{B330F508-242A-470E-9F18-292A5A3E18C9}.Release|x64.Build.0 = Release|Any CPU
+		{B330F508-242A-470E-9F18-292A5A3E18C9}.Release|x86.ActiveCfg = Release|Any CPU
+		{B330F508-242A-470E-9F18-292A5A3E18C9}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -50,6 +66,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{C396B227-BDD6-4508-9A2A-B1BE64A07D04} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{6618DEA2-B292-4A2F-A1B2-9558392685A7} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{B330F508-242A-470E-9F18-292A5A3E18C9} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4AB2B2EE-7B50-40ED-ABE8-1ECA6E56691A}

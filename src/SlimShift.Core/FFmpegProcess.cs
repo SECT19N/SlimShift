@@ -12,7 +12,8 @@ public static class FFmpegProcess {
 		string executable,
 		IEnumerable<string> arguments,
 		TimeSpan? timeout = null,
-		CancellationToken cancellationToken = default) {
+		CancellationToken cancellationToken = default,
+		Action<string>? onStdoutLine = null) {
 		ProcessStartInfo info = new() {
 			FileName = executable,
 			UseShellExecute = false,
@@ -26,7 +27,10 @@ public static class FFmpegProcess {
 			?? throw new InvalidOperationException($"Could not start {executable}.");
 
 		// Read both streams concurrently so a full pipe buffer cannot block the process.
-		Task<string> stdout = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+		// With a line callback, stdout is streamed (e.g. ffmpeg -progress) and not buffered.
+		Task<string> stdout = onStdoutLine == null
+			? process.StandardOutput.ReadToEndAsync(CancellationToken.None)
+			: StreamLinesAsync(process.StandardOutput, onStdoutLine);
 		Task<string> stderr = process.StandardError.ReadToEndAsync(CancellationToken.None);
 
 		using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -41,5 +45,10 @@ public static class FFmpegProcess {
 		}
 
 		return new ProcessResult(process.ExitCode, await stdout, await stderr, TimedOut: false);
+	}
+
+	static async Task<string> StreamLinesAsync(StreamReader reader, Action<string> onLine) {
+		while (await reader.ReadLineAsync() is { } line) onLine(line);
+		return "";
 	}
 }

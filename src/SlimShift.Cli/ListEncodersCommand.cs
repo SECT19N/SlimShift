@@ -5,46 +5,30 @@ namespace SlimShift.Cli;
 
 public sealed class ListEncodersCommand : AsyncCommand {
 	public override async Task<int> ExecuteAsync(CommandContext context) {
-		CancellationToken cancellationToken = CancellationToken.None;
+		Session? session = await Session.CreateAsync();
+		if (session == null) return 1;
 
-		FFmpegTools tools;
-		try {
-			tools = await AnsiConsole.Progress().StartAsync(async ctx => {
-				ProgressTask task = ctx.AddTask("Locating FFmpeg", maxValue: 100);
-				Progress<double> progress = new(value => task.Value = value);
-				FFmpegTools located = await FFmpegLocator.LocateAsync(progress, cancellationToken);
-				task.Value = 100;
-				return located;
-			});
-		} catch (Exception ex) {
-			AnsiConsole.MarkupLine($"[red]✗ {Markup.Escape(ex.Message)}[/]");
-			return 1;
-		}
+		AnsiConsole.MarkupLine($"[dim]FFmpeg ({session.Tools.Source}): {Markup.Escape(session.Tools.FFmpegPath)}[/]");
+		PrintEncoders(session);
+		return 0;
+	}
 
-		AnsiConsole.MarkupLine($"[dim]FFmpeg ({tools.Source}): {Markup.Escape(tools.FFmpegPath)}[/]");
-
-		IReadOnlyList<EncoderInfo> available;
-		try {
-			available = await AnsiConsole.Status().StartAsync("Testing encoders...",
-				_ => EncoderDetector.DetectAsync(tools, cancellationToken));
-		} catch (Exception ex) {
-			AnsiConsole.MarkupLine($"[red]✗ {Markup.Escape(ex.Message)}[/]");
-			return 1;
-		}
-
-		Table table = new Table().AddColumn("Codec").AddColumn("Encoder").AddColumn("Type");
-		foreach (EncoderInfo encoder in available) {
-			string type = encoder.IsHardware ? $"hardware ({encoder.Vendor})" : "software";
-			table.AddRow(encoder.Codec.DisplayName(), Markup.Escape(encoder.Name), type);
+	public static void PrintEncoders(Session session) {
+		Table table = new Table().AddColumn("Codec").AddColumn("Encoder").AddColumn("Type").AddColumn("");
+		foreach (VideoCodec codec in session.AvailableCodecs) {
+			EncoderInfo? best = EncoderRecommender.Recommend(session.Encoders, codec)?.Encoder;
+			foreach (EncoderInfo encoder in EncoderRecommender.Rank(session.Encoders, codec)) {
+				string type = encoder.IsHardware ? $"hardware ({encoder.Vendor})" : "software";
+				table.AddRow(codec.DisplayName(), Markup.Escape(encoder.Name), type,
+					encoder == best ? "[green]recommended[/]" : "");
+			}
 		}
 		AnsiConsole.Write(table);
 
 		string[] missing = Enum.GetValues<VideoCodec>()
-			.Where(codec => available.All(e => e.Codec != codec))
-			.Select(codec => codec.DisplayName()).ToArray();
+			.Where(c => session.Encoders.All(e => e.Codec != c))
+			.Select(c => c.DisplayName()).ToArray();
 		if (missing.Length > 0)
 			AnsiConsole.MarkupLine($"[yellow]No working encoder for: {string.Join(", ", missing)}[/]");
-
-		return 0;
 	}
 }

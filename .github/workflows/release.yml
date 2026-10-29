@@ -1,0 +1,70 @@
+name: Release
+
+# Push a tag such as v0.1.0 to build all platforms and publish a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test SlimShift.sln -c Release
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest # .NET cross-compiles; no native toolchain is needed
+    strategy:
+      matrix:
+        rid: [win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish
+        run: >
+          dotnet publish src/SlimShift.Cli -c Release -r ${{ matrix.rid }}
+          --self-contained -p:PublishSingleFile=true -o publish/${{ matrix.rid }}
+
+      - name: Package
+        run: |
+          cd publish/${{ matrix.rid }}
+          rm -f *.pdb
+          case "${{ matrix.rid }}" in
+            win-*)
+              zip -j ../../slimshift-${{ matrix.rid }}.zip SlimShift.exe ;;
+            *)
+              chmod +x SlimShift
+              tar -czf ../../slimshift-${{ matrix.rid }}.tar.gz SlimShift ;;
+          esac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slimshift-${{ matrix.rid }}
+          path: slimshift-${{ matrix.rid }}.*
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
