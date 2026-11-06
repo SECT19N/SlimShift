@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\SlimShift.Core\SlimShift.Core.csproj" />
+    <ProjectReference Include="..\SlimShift.Core\SlimShift.Core.csproj" />
   </ItemGroup>
 
 </Project>

@@ -90,14 +90,14 @@ Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 ```
 dotnet build SlimShift.sln
 dotnet test SlimShift.sln
-dotnet run --project src/SlimShift.Cli -- list-encoders
+dotnet run --project SlimShift.Cli -- list-encoders
 ```
 
 ```
-src/SlimShift.Core/          UI-free library: FFmpeg locator, encoder detection, profiles,
-                             recommender, job planner, probe and conversion runner
-src/SlimShift.Cli/           Executable: Spectre.Console.Cli commands and the interactive menu
-tests/SlimShift.Core.Tests/  Unit tests (no FFmpeg needed)
+SlimShift.Core/        UI-free library: FFmpeg locator, encoder detection, profiles,
+                       recommender, job planner, probe and conversion runner
+SlimShift.Cli/         Executable: Spectre.Console.Cli commands and the interactive menu
+SlimShift.Core.Tests/  Unit tests (no FFmpeg needed)
 ```
 
 Core has no console code, so a future GUI (Avalonia) can reuse it directly. Pushing a `v*` tag runs the tests on Windows, Linux and macOS and publishes the six release builds via GitHub Actions.

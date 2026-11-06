@@ -36,7 +36,7 @@ jobs:
 
       - name: Publish
         run: >
-          dotnet publish src/SlimShift.Cli -c Release -r ${{ matrix.rid }}
+          dotnet publish SlimShift.Cli -c Release -r ${{ matrix.rid }}
           --self-contained -p:PublishSingleFile=true -o publish/${{ matrix.rid }}
 
       - name: Package
