@@ -159,6 +159,17 @@ public class JobPlannerTests {
     }
 
     [Fact]
+    public void Plan_OutputDirectoryRelocatesTheDefaultNameButExplicitOutputWins() {
+        string dir = Path.Combine(Path.GetTempPath(), "out");
+
+        PlanResult relocated = JobPlanner.Plan(new EncodeRequest("in.mp4", Height: 720, OutputDirectory: dir), Source, Available);
+        Assert.Equal(Path.Combine(dir, "in-720p.mp4"), relocated.Job?.OutputPath);
+
+        PlanResult explicitOutput = JobPlanner.Plan(new EncodeRequest("in.mp4", Output: "x.mp4", OutputDirectory: dir), Source, Available);
+        Assert.Equal("x.mp4", explicitOutput.Job?.OutputPath);
+    }
+
+    [Fact]
     public void DefaultOutputPath_UnknownSourceCodecCountsAsChanged() {
         VideoInfo unknown = Source with { VideoCodecName = "mpeg4" };
         Assert.Equal("in-h264.mp4", Path.GetFileName(JobPlanner.DefaultOutputPath("in.mp4", unknown, VideoCodec.H264, null, null, 23)));
@@ -266,4 +277,142 @@ public class VideoProbeTests {
     [InlineData(null, 0)]
     public void ParseRate_HandlesFractionsAndZero(string? rate, double expected) =>
         Assert.Equal(expected, VideoProbe.ParseRate(rate), 3);
+}
+
+public class PresetStoreTests : IDisposable {
+    readonly string dir = Path.Combine(Path.GetTempPath(), "slimshift-tests-" + Guid.NewGuid().ToString("N"));
+    PresetStore Store => new(dir);
+
+    public void Dispose() {
+        if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+    }
+
+    [Fact]
+    public void SaveAndLoad_RoundTripsEverySetting() {
+        EncodePreset preset = new(VideoCodec.AV1, "libsvtav1", 30, "slow", true, 720, 29.97, true);
+        Store.Save("Phone", preset);
+
+        Assert.Equal(preset, Store.Load("phone"));
+        Assert.Equal(["phone"], Store.List());
+    }
+
+    [Fact]
+    public void Save_RefusesExistingNameUnlessOverwriting() {
+        Store.Save("a", new EncodePreset(Quality: 20));
+        Assert.Throws<PresetException>(() => Store.Save("A", new EncodePreset(Quality: 30)));
+
+        Store.Save("a", new EncodePreset(Quality: 30), overwrite: true);
+        Assert.Equal(30, Store.Load("a").Quality);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("..")]
+    [InlineData(".hidden")]
+    [InlineData("a/b")]
+    [InlineData("a\\b")]
+    [InlineData("con")]
+    [InlineData("has space")]
+    public void Save_RejectsUnsafeNames(string name) {
+        Assert.False(PresetStore.IsValidName(name));
+        Assert.Throws<PresetException>(() => Store.Save(name, new EncodePreset()));
+    }
+
+    [Fact]
+    public void Save_RejectsInvalidSettings() {
+        Assert.Throws<PresetException>(() => Store.Save("x", new EncodePreset(Height: 721)));
+        Assert.Throws<PresetException>(() => Store.Save("x", new EncodePreset(Encoder: "vp9_nvenc")));
+        Assert.Throws<PresetException>(() => Store.Save("x", new EncodePreset(VideoCodec.AV1, "libx264")));
+    }
+
+    [Fact]
+    public void Load_MissingPresetNamesWhatExists() {
+        Store.Save("one", new EncodePreset());
+        PresetException ex = Assert.Throws<PresetException>(() => Store.Load("two"));
+        Assert.Contains("one", ex.Message);
+    }
+
+    [Fact]
+    public void Load_DamagedFileGivesClearError() {
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "broken.json"), "{ not json");
+        PresetException ex = Assert.Throws<PresetException>(() => Store.Load("broken"));
+        Assert.Contains("damaged", ex.Message);
+    }
+
+    [Fact]
+    public void Delete_RemovesPresetAndComplainsWhenMissing() {
+        Store.Save("gone", new EncodePreset());
+        Store.Delete("gone");
+        Assert.Empty(Store.List());
+        Assert.Throws<PresetException>(() => Store.Delete("gone"));
+    }
+
+    [Fact]
+    public void List_IsEmptyWhenFolderDoesNotExist() => Assert.Empty(Store.List());
+}
+
+public class EncodePresetTests {
+    [Fact]
+    public void WithPreset_ExplicitValuesWinAndPresetFillsGaps() {
+        EncodePreset preset = new(VideoCodec.AV1, Quality: 30, Height: 720, Fps: 24);
+        EncodeRequest request = new EncodeRequest("in.mp4", Height: 480).WithPreset(preset);
+
+        Assert.Equal(480, request.Height);
+        Assert.Equal(24, request.Fps);
+        Assert.Equal(30, request.Quality);
+        Assert.Equal(VideoCodec.AV1, request.Codec);
+    }
+
+    [Fact]
+    public void WithPreset_NamingACodecOrEncoderIgnoresThePresetsEncoderChoice() {
+        EncodePreset preset = new(VideoCodec.AV1, "libsvtav1");
+
+        EncodeRequest byCodec = new EncodeRequest("in.mp4", Codec: VideoCodec.H264).WithPreset(preset);
+        Assert.Equal(VideoCodec.H264, byCodec.Codec);
+        Assert.Null(byCodec.EncoderName);
+
+        EncodeRequest byEncoder = new EncodeRequest("in.mp4", EncoderName: "libx264").WithPreset(preset);
+        Assert.Null(byEncoder.Codec);
+        Assert.Equal("libx264", byEncoder.EncoderName);
+    }
+
+    [Fact]
+    public void WithPreset_BooleanFlagsCombine() {
+        EncodeRequest request = new EncodeRequest("in.mp4", PreferSize: true).WithPreset(new EncodePreset(Interpolate: true));
+        Assert.True(request.PreferSize);
+        Assert.True(request.Interpolate);
+    }
+
+    [Fact]
+    public void Describe_SummarisesTheSettings() {
+        Assert.Equal("AV1, 360p, 30fps, q28", new EncodePreset(VideoCodec.AV1, Quality: 28, Height: 360, Fps: 30).Describe());
+        Assert.Equal("(no settings)", new EncodePreset().Describe());
+    }
+}
+
+public class BatchDiscoveryTests : IDisposable {
+    readonly string dir = Path.Combine(Path.GetTempPath(), "slimshift-tests-" + Guid.NewGuid().ToString("N"));
+
+    public BatchDiscoveryTests() {
+        foreach (string file in new[] { "b.mp4", "a.MKV", "notes.txt", "sub/c.webm", "converted/old.mp4" }) {
+            string path = Path.Combine(dir, file);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, "x");
+        }
+    }
+
+    public void Dispose() => Directory.Delete(dir, recursive: true);
+
+    string[] Names(IEnumerable<string> paths) => paths.Select(p => Path.GetRelativePath(dir, p).Replace('\\', '/')).ToArray();
+
+    [Fact]
+    public void FindVideos_TopLevelOnlyFiltersByExtensionAndSorts() {
+        Assert.Equal(["a.MKV", "b.mp4"], Names(BatchDiscovery.FindVideos(dir, recursive: false, Path.Combine(dir, "converted"))));
+    }
+
+    [Fact]
+    public void FindVideos_RecursiveIncludesSubfoldersButNotTheOutputFolder() {
+        Assert.Equal(["a.MKV", "b.mp4", "sub/c.webm"], Names(BatchDiscovery.FindVideos(dir, recursive: true, Path.Combine(dir, "converted"))));
+    }
 }

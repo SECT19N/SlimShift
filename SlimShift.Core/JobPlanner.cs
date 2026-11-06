@@ -13,7 +13,8 @@ public sealed record EncodeRequest(
     bool PreferSize = false,
     int? Height = null,
     double? Fps = null,
-    bool Interpolate = false);
+    bool Interpolate = false,
+    string? OutputDirectory = null);
 
 /// <summary>A fully resolved, validated encode.</summary>
 public sealed record ConversionJob(
@@ -78,6 +79,8 @@ public static class JobPlanner {
             return Fail("Framerate must be greater than zero.");
 
         string output = request.Output ?? DefaultOutputPath(request.Input, source, encoder.Codec, request.Height, request.Fps, quality);
+        if (request.Output == null && request.OutputDirectory != null)
+            output = Path.Combine(request.OutputDirectory, Path.GetFileName(output));
         string extension = Path.GetExtension(output).ToLowerInvariant();
         if (extension == ".webm" && encoder.Codec is not (VideoCodec.VP9 or VideoCodec.AV1))
             return Fail($".webm only holds VP9 or AV1 video, not {encoder.Codec.DisplayName()}.");

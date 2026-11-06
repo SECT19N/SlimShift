@@ -8,8 +8,12 @@ public static class Menu {
     const string Downscale = "Downscale video resolution";
     const string Upscale = "Upscale video resolution";
     const string Framerate = "Change video framerate";
+    const string UsePreset = "Convert a file or folder with a saved preset";
+    const string DeletePreset = "Delete a saved preset";
     const string ListEncoders = "Show available encoders";
     const string Exit = "Exit";
+
+    static readonly PresetStore Presets = new(PresetStore.DefaultDirectory);
 
     public static async Task<int> RunAsync() {
         AnsiConsole.Write(new FigletText("SlimShift").Color(Color.FromHex("#b00b69")));
@@ -22,7 +26,7 @@ public static class Menu {
             string choice = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()
                     .Title("\nWhat would you like to do?")
-                    .AddChoices(ChangeCodec, Downscale, Upscale, Framerate, ListEncoders, Exit));
+                    .AddChoices(ChangeCodec, Downscale, Upscale, Framerate, UsePreset, DeletePreset, ListEncoders, Exit));
 
             if (choice == Exit) return 0;
 
@@ -32,6 +36,8 @@ public static class Menu {
                     Downscale => RunScale(session, upscale: false),
                     Upscale => RunScale(session, upscale: true),
                     Framerate => RunFramerate(session),
+                    UsePreset => RunPreset(session),
+                    DeletePreset => Task.Run(RunDeletePreset),
                     _ => Task.Run(() => ListEncodersCommand.PrintEncoders(session))
                 });
             } catch (Exception ex) {
@@ -144,9 +150,91 @@ public static class Menu {
         await Execute(session, new EncodeRequest(input, Fps: fps, Interpolate: interpolate), info);
     }
 
-    static async Task Execute(Session session, EncodeRequest request, VideoInfo info) {
+    static async Task RunPreset(Session session) {
+        IReadOnlyList<string> names = Presets.List();
+        if (names.Count == 0) {
+            AnsiConsole.MarkupLine("[yellow]No presets saved yet.[/] Finish any conversion and you'll be offered to save its settings.");
+            return;
+        }
+
+        string name = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("Choose a [yellow]preset[/]:").AddChoices(names));
+        EncodePreset preset = Presets.Load(name);
+        AnsiConsole.MarkupLine($"[dim]{Markup.Escape(preset.Describe())}[/]");
+
+        while (true) {
+            string path = AnsiConsole.Prompt(
+                new TextPrompt<string>("Path to a [green]video file or folder[/] (blank to go back):").AllowEmpty())
+                .Trim().Trim('"');
+            if (path.Length == 0) return;
+
+            if (Directory.Exists(path)) {
+                bool recursive = AnsiConsole.Confirm("Include videos in subfolders?", false);
+                await BatchRunner.RunAsync(session, path, new EncodeRequest("").WithPreset(preset), recursive, overwrite: false);
+                return;
+            }
+
+            if (!File.Exists(path)) {
+                AnsiConsole.MarkupLine("[red]✗ Not found.[/]");
+                continue;
+            }
+
+            VideoInfo info = await VideoProbe.ProbeAsync(session.Tools, path);
+            await Execute(session, new EncodeRequest(path).WithPreset(preset), info, offerSave: false);
+            return;
+        }
+    }
+
+    static void RunDeletePreset() {
+        IReadOnlyList<string> names = Presets.List();
+        if (names.Count == 0) {
+            AnsiConsole.MarkupLine("[yellow]No presets saved.[/]");
+            return;
+        }
+
+        string name = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("Delete which [yellow]preset[/]?").AddChoices(names));
+        if (!AnsiConsole.Confirm($"Delete '{Markup.Escape(name)}'?", false)) return;
+
+        Presets.Delete(name);
+        AnsiConsole.MarkupLine($"[green]✓ Deleted preset[/] {Markup.Escape(name)}");
+    }
+
+    /// <summary>
+    /// Keeps the codec but not the encoder when the encoder is simply the recommended one, so the preset
+    /// still works on a machine with different hardware.
+    /// </summary>
+    static EncodePreset ToPreset(Session session, EncodeRequest request) {
+        EncodePreset preset = new(request.Codec, request.EncoderName, request.Quality, request.Preset,
+            request.PreferSize, request.Height, request.Fps, request.Interpolate);
+
+        if (request.EncoderName == null) return preset;
+
+        EncoderInfo encoder = EncoderCatalog.All.First(e => e.Name == request.EncoderName);
+        bool isRecommended = EncoderRecommender.Recommend(session.Encoders, encoder.Codec, request.PreferSize)?.Encoder == encoder;
+        return preset with { Codec = encoder.Codec, Encoder = isRecommended ? null : encoder.Name };
+    }
+
+    static void OfferToSavePreset(Session session, EncodeRequest request) {
+        if (!AnsiConsole.Confirm("Save these settings as a preset?", false)) return;
+
+        string name = AnsiConsole.Prompt(
+            new TextPrompt<string>("Preset name:")
+                .Validate(n => PresetStore.IsValidName(n)
+                    ? ValidationResult.Success()
+                    : ValidationResult.Error("Use letters, digits, '.', '_' or '-' (start with a letter or digit)")));
+
+        bool overwrite = Presets.Exists(name);
+        if (overwrite && !AnsiConsole.Confirm($"'{Markup.Escape(name)}' already exists. Replace it?", false)) return;
+
+        EncodePreset preset = ToPreset(session, request);
+        Presets.Save(name, preset, overwrite);
+        AnsiConsole.MarkupLine($"[green]✓ Saved preset[/] {Markup.Escape(name.ToLowerInvariant())}: {Markup.Escape(preset.Describe())}");
+    }
+
+    static async Task Execute(Session session, EncodeRequest request, VideoInfo info, bool offerSave = true) {
         // Resolve the output path up front so an existing file can be confirmed before encoding starts.
         // If planning fails, ExecuteAsync reports the planner's error.
+        EncodeRequest original = request;
+
         if (JobPlanner.Plan(request, info, session.Encoders).Job is { } job) {
             if (File.Exists(job.OutputPath)
                 && !AnsiConsole.Confirm($"{Markup.Escape(Path.GetFileName(job.OutputPath))} exists. Overwrite?", false))
@@ -154,6 +242,9 @@ public static class Menu {
             request = request with { Output = job.OutputPath };
         }
 
-        await EncodeRunner.ExecuteAsync(session, request, info, overwrite: true);
+        int exitCode = await EncodeRunner.ExecuteAsync(session, request, info, overwrite: true);
+
+        // Offer the original request (before the output path was filled in), so the preset holds settings only.
+        if (exitCode == 0 && offerSave) OfferToSavePreset(session, original);
     }
 }
