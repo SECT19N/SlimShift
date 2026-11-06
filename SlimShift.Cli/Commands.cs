@@ -6,12 +6,20 @@ namespace SlimShift.Cli;
 
 public class EncodeSettings : CommandSettings {
     [CommandArgument(0, "<INPUT>")]
-    [Description("Video file to convert.")]
+    [Description("Video file to convert, or a folder to convert every video in it.")]
     public string Input { get; set; } = "";
 
     [CommandOption("-o|--output <PATH>")]
-    [Description("Output file. Defaults to a name describing what changed (e.g. movie-av1-720p.mp4) beside the input.")]
+    [Description("Output file (or output folder for a folder input). Defaults to a name describing what changed (e.g. movie-av1-720p.mp4) beside the input, or a 'converted' folder inside the input folder.")]
     public string? Output { get; set; }
+
+    [CommandOption("--use <PRESET>")]
+    [Description("Apply a saved preset (see 'presets list'). Options given here override the preset.")]
+    public string? Use { get; set; }
+
+    [CommandOption("--recursive")]
+    [Description("With a folder input, include videos in subfolders.")]
+    public bool Recursive { get; set; }
 
     [CommandOption("--codec <CODEC>")]
     [Description("h264, h265, vp9 or av1. Defaults to the source codec.")]
@@ -82,7 +90,7 @@ public sealed class ScaleSettings : EncodeSettings {
     public int? Height { get; set; }
 
     public override ValidationResult Validate() =>
-        Height == null ? ValidationResult.Error("--height is required.") : base.Validate();
+        Height == null && Use == null ? ValidationResult.Error("--height is required (or --use a preset that has one).") : base.Validate();
 }
 
 public sealed class FpsSettings : EncodeSettings {
@@ -95,27 +103,61 @@ public sealed class FpsSettings : EncodeSettings {
     public bool Interpolate { get; set; }
 
     public override ValidationResult Validate() =>
-        Fps == null ? ValidationResult.Error("--fps is required.") : base.Validate();
+        Fps == null && Use == null ? ValidationResult.Error("--fps is required (or --use a preset that has one).") : base.Validate();
 }
 
 static class CommandHelper {
-    public static async Task<int> Run(EncodeSettings settings, EncodeRequest request) {
+    /// <summary>Applies the preset, checks the input, then converts one file or a whole folder.</summary>
+    public static async Task<int> Run(
+        EncodeSettings settings, int? height, double? fps, bool interpolate, bool needHeight = false, bool needFps = false) {
+        EncodeRequest request = settings.ToRequest(height, fps, interpolate);
+
+        if (settings.Use != null) {
+            try {
+                request = request.WithPreset(new PresetStore(PresetStore.DefaultDirectory).Load(settings.Use));
+            } catch (PresetException ex) {
+                return Fail(ex.Message);
+            }
+        }
+
+        if (needHeight && request.Height == null) return Fail($"Preset '{settings.Use}' has no height; add --height.");
+        if (needFps && request.Fps == null) return Fail($"Preset '{settings.Use}' has no framerate; add --fps.");
+
+        bool isFolder = Directory.Exists(request.Input);
+
+        if (isFolder && request.Output != null) {
+            if (File.Exists(request.Output) || Path.HasExtension(request.Output))
+                return Fail("For a folder input, -o must be an output folder, not a file.");
+            request = request with { Output = null, OutputDirectory = request.Output };
+        } else if (!isFolder && settings.Recursive) {
+            return Fail("--recursive only applies to a folder input.");
+        }
+
         Session? session = await Session.CreateAsync();
-        return session == null ? 1 : await EncodeRunner.RunAsync(session, request, settings.Overwrite);
+        if (session == null) return 1;
+
+        return isFolder
+            ? await BatchRunner.RunAsync(session, request.Input, request, settings.Recursive, settings.Overwrite)
+            : await EncodeRunner.RunAsync(session, request, settings.Overwrite);
+    }
+
+    public static int Fail(string message) {
+        AnsiConsole.MarkupLine($"[red]✗ {Markup.Escape(message)}[/]");
+        return 1;
     }
 }
 
 public sealed class ConvertCommand : AsyncCommand<ConvertSettings> {
     public override Task<int> ExecuteAsync(CommandContext context, ConvertSettings s) =>
-        CommandHelper.Run(s, s.ToRequest(s.Height, s.Fps, s.Interpolate));
+        CommandHelper.Run(s, s.Height, s.Fps, s.Interpolate);
 }
 
 public sealed class ScaleCommand : AsyncCommand<ScaleSettings> {
     public override Task<int> ExecuteAsync(CommandContext context, ScaleSettings s) =>
-        CommandHelper.Run(s, s.ToRequest(s.Height, null, false));
+        CommandHelper.Run(s, s.Height, null, false, needHeight: true);
 }
 
 public sealed class FpsCommand : AsyncCommand<FpsSettings> {
     public override Task<int> ExecuteAsync(CommandContext context, FpsSettings s) =>
-        CommandHelper.Run(s, s.ToRequest(null, s.Fps, s.Interpolate));
+        CommandHelper.Run(s, null, s.Fps, s.Interpolate, needFps: true);
 }

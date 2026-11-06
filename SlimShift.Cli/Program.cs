@@ -22,6 +22,15 @@ public static class Program {
             config.AddCommand<FpsCommand>("fps")
                 .WithDescription("Change the framerate.")
                 .WithExample("fps", "movie.mp4", "--fps", "30");
+            config.AddBranch("presets", presets => {
+                presets.SetDescription("Save and reuse sets of settings (apply with --use <name>).");
+                presets.AddCommand<PresetListCommand>("list").WithDescription("List saved presets.");
+                presets.AddCommand<PresetShowCommand>("show").WithDescription("Show one preset's settings.");
+                presets.AddCommand<PresetSaveCommand>("save")
+                    .WithDescription("Save a preset.")
+                    .WithExample("presets", "save", "phone", "--codec", "av1", "--height", "720");
+                presets.AddCommand<PresetDeleteCommand>("delete").WithDescription("Delete a preset.");
+            });
         });
 
         return await app.RunAsync(args);

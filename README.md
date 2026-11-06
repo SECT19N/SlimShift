@@ -47,7 +47,27 @@ SlimShift convert movie.mkv --codec av1
 SlimShift convert movie.mp4 --encoder libx265 -q 26 --preset slow
 SlimShift scale movie.mp4 --height 720
 SlimShift fps movie.mp4 --fps 30 --interpolate
+SlimShift convert D:\Videos --codec av1 --height 720 --recursive
+SlimShift presets save phone --codec av1 --height 720 -q 32
+SlimShift convert D:\Videos --use phone
 ```
+
+### Folders
+
+Give `convert`, `scale` or `fps` a folder instead of a file to convert every video in it (`.mp4 .mkv .mov .m4v .avi .webm .wmv .flv .ts .mts .m2ts`). Outputs go to a `converted` folder inside the input folder, or to the folder you pass with `-o`. `--recursive` includes subfolders and mirrors them in the output. Files whose output already exists are skipped, a file that fails doesn't stop the rest, and a summary is printed at the end. Exit code is 1 if any file failed.
+
+### Presets
+
+A preset is a named set of settings (codec, encoder, quality, speed, height, framerate...) saved as a small JSON file in `%APPDATA%\SlimShift\presets` (`~/.config/SlimShift/presets` on Linux). Apply one with `--use <name>`; options you give alongside it override the preset. In the menu, you are offered to save the settings after each conversion, and "Convert a file or folder with a saved preset" applies one.
+
+A preset that names only a codec lets SlimShift pick the best encoder on each machine. Pin `--encoder` only if you need that exact one; it is refused on machines that lack it.
+
+| Command | Purpose |
+|---|---|
+| `presets list` | Show saved presets |
+| `presets show <name>` | Show one preset's settings |
+| `presets save <name> [options]` | Save a preset (`--overwrite` to replace). Takes `--codec --encoder -q --preset --prefer-size --height --fps --interpolate` |
+| `presets delete <name>` | Delete a preset |
 
 | Command | Purpose |
 |---|---|
@@ -66,6 +86,8 @@ Common options for `convert`, `scale` and `fps`:
 | `-q, --quality <n>` | Quality, lower is better. Range depends on the encoder (e.g. 0-51 for x264, 0-63 for AV1) |
 | `--preset <name>` | Speed/efficiency preset, where the encoder has one |
 | `--prefer-size` | Prefer software encoders (slower, smaller files) over hardware |
+| `--use <name>` | Apply a saved preset; other options override it |
+| `--recursive` | With a folder input, include subfolders |
 | `--overwrite` | Replace an existing output file |
 
 Without `--encoder`, SlimShift picks the recommended one: hardware first for speed, or software first with `--prefer-size`. Exit code is 0 on success and non-zero on failure, so it is safe to script. Ctrl+C cancels and removes the partial output.
@@ -110,7 +132,6 @@ Tested on Windows. Linux and macOS builds are produced and unit-tested in CI but
 
 - Avalonia GUI
 - Linux VAAPI support
-- Batch folders and presets
 - macOS code signing
 
 ## License
