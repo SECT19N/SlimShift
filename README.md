@@ -60,7 +60,7 @@ Common options for `convert`, `scale` and `fps`:
 
 | Option | Meaning |
 |---|---|
-| `-o, --output <path>` | Output file. Default: `<input>-slim.<ext>` beside the input |
+| `-o, --output <path>` | Output file. Default: named after what changed, e.g. `movie-av1-720p-30fps.mp4` (or `movie-q23.mp4` if nothing changed), beside the input |
 | `--codec <h264\|h265\|vp9\|av1>` | Target codec. Default: the source codec |
 | `--encoder <name>` | A specific encoder. Rejected if it doesn't work on this machine |
 | `-q, --quality <n>` | Quality, lower is better. Range depends on the encoder (e.g. 0-51 for x264, 0-63 for AV1) |

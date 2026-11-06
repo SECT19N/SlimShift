@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace SlimShift;
 
 /// <summary>What the user asked for. Anything left null is chosen automatically.</summary>
@@ -75,7 +77,7 @@ public static class JobPlanner {
         if (request.Fps is <= 0)
             return Fail("Framerate must be greater than zero.");
 
-        string output = request.Output ?? DefaultOutputPath(request.Input, encoder.Codec);
+        string output = request.Output ?? DefaultOutputPath(request.Input, source, encoder.Codec, request.Height, request.Fps, quality);
         string extension = Path.GetExtension(output).ToLowerInvariant();
         if (extension == ".webm" && encoder.Codec is not (VideoCodec.VP9 or VideoCodec.AV1))
             return Fail($".webm only holds VP9 or AV1 video, not {encoder.Codec.DisplayName()}.");
@@ -89,13 +91,29 @@ public static class JobPlanner {
             null, recommendation);
     }
 
-    /// <summary>"movie.mkv" becomes "movie-slim.mp4" (extension chosen for the codec) beside the input.</summary>
-    public static string DefaultOutputPath(string input, VideoCodec codec)
-    {
+    /// <summary>
+    /// Names the output after what changed versus the source, beside the input:
+    /// "movie.mkv" becomes "movie-av1-720p-30fps.mp4". With no change at all it falls back to "movie-q23.mp4".
+    /// </summary>
+    public static string DefaultOutputPath(string input, VideoInfo source, VideoCodec codec, int? height, double? fps, int quality) {
+        List<string> parts = [];
+        if (source.Codec != codec) parts.Add(CodecTag(codec));
+        if (height is { } h) parts.Add($"{h}p");
+        if (fps is { } f) parts.Add(string.Create(CultureInfo.InvariantCulture, $"{f:0.##}fps"));
+        if (parts.Count == 0) parts.Add($"q{quality}");
+
         string directory = Path.GetDirectoryName(Path.GetFullPath(input)) ?? ".";
-        string name = Path.GetFileNameWithoutExtension(input) + "-slim" + EncoderProfiles.DefaultExtension(codec);
+        string name = Path.GetFileNameWithoutExtension(input) + "-" + string.Join('-', parts) + EncoderProfiles.DefaultExtension(codec);
         return Path.Combine(directory, name);
     }
+
+    static string CodecTag(VideoCodec codec) => codec switch {
+        VideoCodec.H264 => "h264",
+        VideoCodec.H265 => "h265",
+        VideoCodec.VP9 => "vp9",
+        VideoCodec.AV1 => "av1",
+        _ => codec.ToString().ToLowerInvariant()
+    };
 
     static PlanResult Fail(string error) => new(null, error);
 }

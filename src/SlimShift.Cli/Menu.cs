@@ -146,17 +146,14 @@ public static class Menu {
 
     static async Task Execute(Session session, EncodeRequest request, VideoInfo info) {
         // Resolve the output path up front so an existing file can be confirmed before encoding starts.
-        VideoCodec codec = request.EncoderName != null
-            ? EncoderCatalog.All.First(e => e.Name == request.EncoderName).Codec
-            : request.Codec ?? info.Codec ?? VideoCodec.H264;
-        string output = request.Output ?? JobPlanner.DefaultOutputPath(request.Input, codec);
+        // If planning fails, ExecuteAsync reports the planner's error.
+        if (JobPlanner.Plan(request, info, session.Encoders).Job is { } job) {
+            if (File.Exists(job.OutputPath)
+                && !AnsiConsole.Confirm($"{Markup.Escape(Path.GetFileName(job.OutputPath))} exists. Overwrite?", false))
+                return;
+            request = request with { Output = job.OutputPath };
+        }
 
-        bool overwrite = true;
-        
-        if (File.Exists(output))
-            overwrite = AnsiConsole.Confirm($"{Markup.Escape(Path.GetFileName(output))} exists. Overwrite?", false);
-        if (!overwrite) return;
-
-        await EncodeRunner.ExecuteAsync(session, request with { Output = output }, info, overwrite: true);
+        await EncodeRunner.ExecuteAsync(session, request, info, overwrite: true);
     }
 }

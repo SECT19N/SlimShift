@@ -10,7 +10,7 @@ public class EncodeSettings : CommandSettings {
     public string Input { get; set; } = "";
 
     [CommandOption("-o|--output <PATH>")]
-    [Description("Output file. Defaults to <input>-slim.<ext> beside the input.")]
+    [Description("Output file. Defaults to a name describing what changed (e.g. movie-av1-720p.mp4) beside the input.")]
     public string? Output { get; set; }
 
     [CommandOption("--codec <CODEC>")]

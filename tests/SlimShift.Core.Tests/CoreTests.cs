@@ -143,7 +143,25 @@ public class JobPlannerTests {
     public void Plan_DefaultsToSourceCodec() {
         PlanResult result = JobPlanner.Plan(new EncodeRequest("in.mp4"), Source, Available);
         Assert.Equal("libx264", result.Job?.Encoder.Name);
-        Assert.EndsWith("in-slim.mp4", result.Job?.OutputPath);
+        Assert.EndsWith("in-q23.mp4", result.Job?.OutputPath);
+    }
+
+    [Theory]
+    [InlineData(VideoCodec.AV1, null, null, "in-av1.mkv")]
+    [InlineData(VideoCodec.H264, 720, null, "in-720p.mp4")]
+    [InlineData(VideoCodec.H264, null, 30.0, "in-30fps.mp4")]
+    [InlineData(VideoCodec.H264, null, 23.976, "in-23.98fps.mp4")]
+    [InlineData(VideoCodec.H265, 720, 30.0, "in-h265-720p-30fps.mp4")]
+    [InlineData(VideoCodec.H264, null, null, "in-q28.mp4")]
+    public void DefaultOutputPath_DescribesWhatChanged(VideoCodec codec, int? height, double? fps, string expected) {
+        string path = JobPlanner.DefaultOutputPath("in.mp4", Source, codec, height, fps, 28);
+        Assert.Equal(expected, Path.GetFileName(path));
+    }
+
+    [Fact]
+    public void DefaultOutputPath_UnknownSourceCodecCountsAsChanged() {
+        VideoInfo unknown = Source with { VideoCodecName = "mpeg4" };
+        Assert.Equal("in-h264.mp4", Path.GetFileName(JobPlanner.DefaultOutputPath("in.mp4", unknown, VideoCodec.H264, null, null, 23)));
     }
 
     [Fact]
